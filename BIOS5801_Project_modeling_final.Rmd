@@ -1,0 +1,746 @@
+---
+title: "BIOS5801_final"
+output: html_document
+date: "2025-12-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=TRUE}
+df <- read.csv("heart.csv")
+head(df)
+summary(df)
+colSums(is.na(df))
+```
+
+```{r echo=TRUE, fig.height=6, fig.width=10}
+library(ggplot2)
+library(gridExtra)
+
+numerical_vars <- c("Age", "RestingBP", "Cholesterol", "MaxHR", "Oldpeak")
+
+plots <- list()
+
+histograms <- list()
+
+for (var in numerical_vars) {
+  p <- ggplot(df, aes(x = .data[[var]])) +
+    geom_histogram(aes(y = ..density..), bins = 30, fill = "#69b3a2", color = "white", alpha = 0.8) +
+    geom_density(color = "#D55E00", linewidth = 1.2, alpha = 0.7) +  
+    theme_classic(base_size = 14) +
+    labs(
+      title = paste("Histogram of", var),
+      x = var,
+      y = "Density"
+    ) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 10),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    ) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  histograms[[var]] <- p
+}
+
+grid.arrange(grobs = histograms, ncol = 3)
+```
+
+```{r echo=TRUE, fig.height=6, fig.width=10}
+overlay_plots <- list()
+outliers <- list()
+
+for (var in numerical_vars) {
+  Q1 <- quantile(df[[var]], 0.25, na.rm = TRUE)
+  Q3 <- quantile(df[[var]], 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  outlier_values <- df[[var]][df[[var]] < lower_bound | df[[var]] > upper_bound]
+  
+  outliers[[var]] <- list(
+    "Lower Bound" = lower_bound,
+    "Upper Bound" = upper_bound,
+    "Outliers" = outlier_values
+  )
+  
+  p <- ggplot(df, aes(x = "", y = .data[[var]])) +  # x 为 ""，所有点显示在一列
+    geom_violin(
+      fill = "#0099cc",
+      color = "black",
+      alpha = 0.5 
+    ) +
+    geom_boxplot(
+      width = 0.15,
+      fill = "white",     
+      outlier.shape = 16, 
+      outlier.color = "red",
+      outlier.size = 2    
+    ) +
+    theme_minimal(base_size = 14) +
+    labs(
+      title = paste("Violin + Boxplot of", var), 
+      x = "", 
+      y = var
+    ) +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5,  
+        face = "bold", 
+        size = 12    
+      ),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 8),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()  
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = c(0.05, 0.05))  
+    )
+  
+  overlay_plots[[var]] <- p
+}
+
+grid.arrange(grobs = overlay_plots, ncol = 3) 
+```
+
+```{r echo=TRUE}
+library(VIM)
+outliers
+
+df$RestingBP[df$RestingBP == 0] <- NA
+df$Cholesterol[df$Cholesterol == 0] <- NA
+
+df <- kNN(df, k = 5, imp_var = FALSE)
+```
+
+```{r echo=TRUE, fig.height=6, fig.width=10}
+plots <- list()
+histograms <- list()
+
+for (var in numerical_vars) {
+  p <- ggplot(df, aes(x = .data[[var]])) +
+    geom_histogram(aes(y = ..density..), bins = 30, fill = "#69b3a2", color = "white", alpha = 0.8) +
+    geom_density(color = "#D55E00", linewidth = 1.2, alpha = 0.7) +  
+    theme_classic(base_size = 14) +
+    labs(
+      title = paste("Histogram of", var),
+      x = var,
+      y = "Density"
+    ) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 10),
+      panel.grid.major = element_line(color = "gray90"),
+      panel.grid.minor = element_blank()
+    ) +
+    scale_x_continuous(expand = expansion(mult = c(0.05, 0.05))) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  histograms[[var]] <- p
+}
+
+grid.arrange(grobs = histograms, ncol = 3)
+```
+
+```{r echo=TRUE,fig.height=10, fig.width=10}
+library(GGally)
+
+numerical_vars2 <- df[c("HeartDisease", "Age", "RestingBP", "Cholesterol", "MaxHR", "Oldpeak")]
+
+scatter_plot_matrix <- ggpairs(
+  numerical_vars2,
+  aes(color = as.factor(HeartDisease), alpha = 0.7),
+  lower = list(
+    continuous = wrap("points", alpha = 0.7)
+  ),
+  diag = list(
+    continuous = wrap("densityDiag", alpha = 0.6) 
+  ),
+  upper = list(
+    continuous = wrap("cor", size = 4, alignPercent = 0.5)
+  ),
+  title = "Scatter Plot Matrix of Numerical Variables Grouped by HeartDisease"
+)
+
+print(scatter_plot_matrix)
+```
+
+```{r, fig.height=6, fig.width=10}
+library(dplyr)
+
+categorical_vars <- c("Sex", "ChestPainType", "FastingBS","RestingECG", "ExerciseAngina", "ST_Slope")
+
+category_plots <- list()
+
+for (var in categorical_vars) {
+  plot_data <- df %>%
+    group_by(.data[[var]], HeartDisease) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    mutate(Percent = Count / sum(Count) * 100) 
+  p <- ggplot(plot_data, aes(x = .data[[var]], y = Count, fill = factor(HeartDisease))) +
+    geom_bar(stat = "identity", position = "dodge", alpha = 0.8) + 
+    geom_text(
+      aes(label = paste0(round(Percent, 1), "%")), 
+      position = position_dodge(width = 0.9), vjust = 0.5, size = 2 
+    ) +
+    labs(
+      title = paste("Heart Disease by", var),
+      x = var,
+      y = "Count", 
+      fill = "Heart Disease"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 10), 
+      axis.title = element_text(size = 8), 
+      axis.text = element_text(size = 8),
+      legend.position = "right" 
+    ) +
+    scale_fill_manual(values = c("#96ceb4", "#ffef96"))
+  category_plots[[var]] <- p 
+}
+
+total_plots <- length(categorical_vars)
+ncol_set <- 3 
+nrow_set <- ceiling(total_plots / ncol_set)
+
+grid.arrange(
+  grobs = category_plots,
+  ncol = ncol_set, 
+  nrow = nrow_set,
+  heights = rep(1, nrow_set),
+  top = textGrob("Categorical Variables Distribution", gp = gpar(fontsize = 15, fontface = "bold"))
+)
+```
+
+```{r echo=TRUE}
+library(corrplot)
+
+target <- "HeartDisease"
+
+categorical_corr_results <- lapply(categorical_vars, function(var) {
+  ct <- table(df[[var]], df[[target]])
+  chi_test <- chisq.test(ct)
+  list(
+    Variable = var,
+    Chi_Square = chi_test$statistic,
+    P_Value = chi_test$p.value
+  ) 
+})
+
+for (result in categorical_corr_results) {
+  print(result)
+}
+```
+
+```{r echo=TRUE, fig.height=15, fig.width=15}
+library(fastDummies)
+library(pheatmap)
+library(dplyr)
+
+df_dummied <- dummy_cols(df, remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+
+fig <- function(x, y){
+  options(repr.plot.width = x, repr.plot.height = y)
+}
+
+fig(15, 15)
+
+df_cor <- cor(df |> select(where(is.numeric)), use = "pairwise.complete.obs", method = 'spearman')
+pheatmap(df_cor, 
+        display_numbers = TRUE, 
+        main = "Correlation Heatmap", 
+        fontsize_col = 20, fontsize_row = 20, fontsize = 20, fontsize_number = 15,
+        breaks = seq(-1, 1, by = 0.02),
+        color = colorRampPalette(c("steelblue", "white", "firebrick"))(100)
+        )
+```
+```{r}
+categorical_vars <- c("Sex", "ChestPainType", "FastingBS", "RestingECG", "ExerciseAngina", "ST_Slope")
+cat("Reference Levels (The categories dropped by remove_first_dummy = TRUE):\n")
+cat("---------------------------------------------------------------------\n")
+for (var in categorical_vars) {
+  ref_level <- levels(factor(df[[var]]))[1]
+  cat(sprintf("Variable: %-15s | Reference Class: %s\n", var, ref_level))
+}
+```
+
+```{r echo=TRUE}
+library(caret)
+set.seed(42)
+train_index <- createDataPartition(y=as.factor(df_dummied$HeartDisease), p=0.8, list=FALSE)
+
+train_set <- df_dummied[train_index, ]
+test_set <- df_dummied[-train_index, ]
+
+```
+
+```{r echo=TRUE}
+evaluate_model <- function(model, test_data, outcome, threshold = 0.5, 
+                           glmnet_newx = NULL, glmnet_s = "lambda.min") {
+  
+  # --- 1. Generate Probabilities ---
+  if (inherits(model, "train")) {
+    pred_probs <- predict(model, test_data, type = "prob")
+    pos_col <- intersect(names(pred_probs), c("X1", "Yes", "1", "Positive"))
+    if (length(pos_col) > 0) {
+      probs <- pred_probs[[pos_col[1]]]
+    } else {
+      probs <- pred_probs[, 2]
+    }
+  } else if (inherits(model, "cv.glmnet") || inherits(model, "glmnet")) {
+    # Ensure explicit numeric vector conversion for Lasso matrices
+    probs <- as.vector(predict(model, newx = glmnet_newx, s = glmnet_s, type = "response"))
+  } else {
+    probs <- predict(model, test_data, type = "response")
+  }
+
+  # --- 2. Prepare Truth Vector (0/1) ---
+  if (is.character(outcome) && length(outcome) == 1 && is.data.frame(test_data)) {
+    truth_vec <- test_data[[outcome]]
+  } else {
+    truth_vec <- outcome
+  }
+
+  # Robust conversion to 0/1 numeric
+  if (is.factor(truth_vec)) {
+    # If levels are "X0", "X1" or "0", "1", this maps the first level to 0 and second to 1
+    truth_num <- as.numeric(truth_vec) - 1 
+  } else {
+    truth_num <- as.numeric(truth_vec)
+  }
+
+  # --- 3. Calculate Metrics ---
+  pred_class <- ifelse(probs > threshold, 1, 0)
+  pred_factor <- factor(pred_class, levels = c(0, 1))
+  truth_factor <- factor(truth_num, levels = c(0, 1))
+
+  cm <- caret::confusionMatrix(pred_factor, truth_factor, mode = "everything", positive = "1")
+
+  accuracy    <- cm$overall["Accuracy"]
+  precision   <- cm$byClass["Precision"]
+  recall      <- cm$byClass["Recall"]
+  f1_score    <- cm$byClass["F1"]
+  brier_score <- mean((probs - truth_num)^2)
+
+  # --- 4. ROC & PR Curves ---
+  roc_obj <- pROC::roc(truth_num, probs, quiet = TRUE)
+  auc_val <- pROC::auc(roc_obj)
+  roc_df <- data.frame(TPR = roc_obj$sensitivities, FPR = 1 - roc_obj$specificities)
+
+  p_roc <- ggplot2::ggplot(roc_df, ggplot2::aes(x = FPR, y = TPR)) +
+    ggplot2::geom_line(color = "blue", linewidth = 1) +
+    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray") +
+    ggplot2::labs(title = paste0("ROC (AUC = ", round(auc_val, 3), ")"), x = "1 - Specificity", y = "Sensitivity") +
+    ggplot2::theme_minimal()
+
+  pred_obj <- ROCR::prediction(probs, truth_num)
+  perf_pr <- ROCR::performance(pred_obj, "prec", "rec")
+  pr_df <- data.frame(Recall = perf_pr@x.values[[1]], Precision = perf_pr@y.values[[1]])
+  pr_df <- na.omit(pr_df)
+  auc_pr <- ROCR::performance(pred_obj, "aucpr")@y.values[[1]]
+
+  p_pr <- ggplot2::ggplot(pr_df, ggplot2::aes(x = Recall, y = Precision)) +
+    ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+    ggplot2::labs(title = paste0("PR Curve (AUC = ", round(auc_pr, 3), ")"), x = "Recall", y = "Precision") +
+    ggplot2::theme_minimal()
+
+  # --- 5. Calibration Plot ---
+  cal_df <- data.frame(truth = truth_num, prob = probs)
+  cal_df$bin <- cut(cal_df$prob, breaks = seq(0, 1, 0.1), include.lowest = TRUE)
+  cal_summary <- dplyr::group_by(cal_df, bin) |> 
+    dplyr::summarise(mean_prob = mean(prob), obs_frac = mean(truth), n = dplyr::n()) |> 
+    na.omit()
+
+  p_cal <- ggplot2::ggplot(cal_summary, ggplot2::aes(x = mean_prob, y = obs_frac)) +
+    ggplot2::geom_point(ggplot2::aes(size = n), alpha = 0.7) + ggplot2::geom_line() +
+    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+    ggplot2::labs(title = "Calibration", x = "Predicted Prob", y = "Observed Fraction") +
+    ggplot2::xlim(0, 1) + ggplot2::ylim(0, 1) + ggplot2::theme_minimal()
+
+  # --- 6. Confusion Matrix Plot ---
+  cm_df <- as.data.frame(cm$table)
+  cm_df$Prediction <- factor(cm_df$Prediction, levels = c(1, 0))
+  p_cm <- ggplot2::ggplot(cm_df, ggplot2::aes(x = Reference, y = Prediction, fill = Freq)) +
+    ggplot2::geom_tile() + ggplot2::geom_text(ggplot2::aes(label = Freq), color = "white", size = 6) +
+    ggplot2::labs(title = "Confusion Matrix") + ggplot2::theme_minimal() + ggplot2::theme(legend.position = "none")
+
+  gridExtra::grid.arrange(p_roc, p_pr, p_cal, p_cm, ncol = 2)
+
+  # --- 7. Print Metrics to Console ---
+  cat("Accuracy:    ", round(accuracy, 4), "\n")
+  cat("ROC AUC:     ", round(auc_val, 4), "\n")
+  cat("Brier Score: ", round(brier_score, 4), "\n") 
+
+  list(plots = list(p_roc, p_pr, p_cal, p_cm),
+       metrics = cm$byClass,
+       extras = list(Accuracy = accuracy, Brier = brier_score, AUC_ROC = as.numeric(auc_val), AUC_PR = as.numeric(auc_pr)))
+}
+```
+
+```{r echo=TRUE}
+library(naivebayes)
+
+df_nb <- df
+
+cat_vars <- c("Sex", "ChestPainType", "FastingBS", "RestingECG", "ExerciseAngina", "ST_Slope", "HeartDisease")
+df_nb[cat_vars] <- lapply(df_nb[cat_vars], as.factor)
+
+levels(df_nb$HeartDisease) <- make.names(levels(df_nb$HeartDisease))
+
+train_set_nb <- df_nb[train_index, ]
+test_set_nb  <- df_nb[-train_index, ]
+
+cv_control <- trainControl(
+  method = "cv",            
+  number = 5,               
+  classProbs = TRUE,       
+  summaryFunction = prSummary, 
+  verboseIter = FALSE,       
+  allowParallel = TRUE      
+)
+
+cv_control_nb <- cv_control
+
+nb_grid <- expand.grid(
+  usekernel = c(TRUE, FALSE),
+  laplace = c(0, 0.5, 1),
+  adjust = c(0.75, 1, 1.25)
+)
+
+set.seed(42)
+nb_tuned <- train(
+  HeartDisease ~ ., 
+  data = train_set_nb,
+  method = "naive_bayes",
+  trControl = cv_control_nb,
+  tuneGrid = nb_grid,
+  metric = "F" 
+)
+
+print(nb_tuned)
+
+evaluate_model(
+  model = nb_tuned, 
+  test_data = test_set_nb, 
+  outcome = "HeartDisease"
+)
+
+varImp_nb <- varImp(nb_tuned)
+plot(varImp_nb, main = "Naive Bayes Variable Importance")
+```
+
+```{r echo=TRUE}
+library(MLmetrics)
+
+y_train <- factor(train_set$HeartDisease)
+levels(y_train) <- make.names(levels(y_train))
+
+y_test <- factor(test_set$HeartDisease)
+levels(y_test) <- make.names(levels(y_test))
+
+X_train <- model.matrix(HeartDisease ~ . -1, data = train_set)
+X_test <- model.matrix(HeartDisease ~ . -1, data = test_set)
+
+xgb_grid <- expand.grid(
+  nrounds = c(150, 100, 50),         
+  max_depth = c(2, 3, 5),         
+  eta = c(0.05, 0.1, 0.3),   
+  gamma = c(0, 0.1, 0.5, 1), 
+  colsample_bytree = 0.8, 
+  min_child_weight = 1,      
+  subsample = 0.8  
+)
+
+set.seed(42)
+
+xgb_tuned <- train(
+  x = X_train, 
+  y = y_train,
+  method = "xgbTree",
+  trControl = cv_control,
+  tuneGrid = xgb_grid,
+  metric = "F",
+  verbosity = 0
+)
+
+```
+
+```{r echo=TRUE}
+library(pROC)
+library(ROCR)
+library(gridExtra)
+
+evaluate_model(xgb_tuned, X_test, test_set$HeartDisease)
+```
+
+```{r echo=TRUE}
+library(SHAPforxgboost)
+
+shap_long <- shap.prep(
+  xgb_model = xgb_tuned$finalModel, 
+  X_train = X_train,
+  top_n = 15
+)
+
+shap.plot.summary(shap_long) + 
+  scale_color_gradient(low = "#0072B2", high = "#D55E00", 
+                       name = "Feature Value") +
+  
+  labs(
+    title = "XGBoost: Feature Impact (SHAP Values)",
+    subtitle = "Top 15 Most Important Predictors",
+    x = "SHAP Value (Impact on Log-Odds)"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "right",
+    axis.text.y = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+results_by_age <- function(data, model, age_col, target_col, age_groups) {
+  metrics <- data.frame()
+  
+  for (group in age_groups) {
+    if (group == "<45") {
+      subset_data <- data[data[[age_col]] < 45, ]
+    } else if (group == "45-60") {
+      subset_data <- data[data[[age_col]] >= 45 & data[[age_col]] <= 60, ]
+    } else if (group == ">60") {
+      subset_data <- data[data[[age_col]] > 60, ]
+    }
+    
+    if (nrow(subset_data) == 0) {
+      warning(paste("Group", group, "has no samples!"))
+      next
+    }
+    
+    print(paste("Group:", group))
+    print(table(subset_data$HeartDisease))
+
+    y_subset <- factor(subset_data[[target_col]], levels = c("X0", "X1"))
+    print(table(y_subset)) 
+    
+    if (length(unique(y_subset)) < 2) {
+      warning(paste("Group", group, "has insufficient categories!"))
+      next
+    }
+    
+    X_subset <- model.matrix(as.formula(paste(target_col, "~ . -1")), data = subset_data)
+    
+    pred_probs <- predict(model, newdata = X_subset, type = "prob")
+    pred_class <- ifelse(pred_probs[, 2] > 0.5, "X1", "X0")
+    pred_class <- factor(pred_class, levels = levels(y_subset))
+    
+    print(table(pred_class))
+
+    confusion <- caret::confusionMatrix(pred_class, y_subset)
+    metrics <- rbind(metrics, data.frame(
+      AgeGroup = group,
+      Accuracy = confusion$overall["Accuracy"],
+      Recall = confusion$byClass["Recall"],
+      Precision = confusion$byClass["Precision"],
+      F1 = confusion$byClass["F1"]
+    ))
+  }
+  
+  return(metrics)
+}
+```
+
+```{r echo=TRUE}
+age_groups <- c("<45", "45-60", ">60")
+
+test_set$HeartDisease <- factor(test_set$HeartDisease, levels = c(0, 1), labels = c("X0", "X1"))
+
+age_results <- results_by_age(test_set, xgb_tuned, "Age", "HeartDisease", age_groups)
+
+print(age_results)
+```
+
+```{r echo=TRUE}
+adjust_threshold <- function(probabilities, labels, threshold) {
+  predicted_class <- ifelse(probabilities[, 2] >= threshold, "X1", "X0")
+  confusion <- caret::confusionMatrix(factor(predicted_class, levels = c("X0", "X1")),
+                                      factor(labels, levels = c("X0", "X1")))
+  return(list(
+    Accuracy = confusion$overall["Accuracy"],
+    Recall = confusion$byClass["Recall"],
+    Precision = confusion$byClass["Precision"],
+    F1 = confusion$byClass["F1"]
+  ))
+}
+
+probabilities <- predict(xgb_tuned, X_test, type = "prob")
+labels <- test_set$HeartDisease
+
+thresholds <- seq(0.4, 0.6, by = 0.01)
+results <- lapply(thresholds, function(thr) adjust_threshold(probabilities, labels, thr))
+
+threshold_adjustment <- data.frame(
+  Threshold = thresholds,
+  Accuracy = sapply(results, function(x) x$Accuracy), 
+  Recall = sapply(results, function(x) x$Recall), 
+  Precision = sapply(results, function(x) x$Precision), 
+  F1 = sapply(results, function(x) x$F1)
+)
+
+ggplot(threshold_adjustment, aes(x = Threshold)) + 
+  geom_line(aes(y = Accuracy, color = "Accuracy")) + 
+  geom_line(aes(y = Recall, color = "Recall")) + 
+  geom_line(aes(y = Precision, color = "Precision")) + 
+  geom_line(aes(y = F1, color = "F1")) +
+  labs(title = "Performance Metrics vs Threshold", y = "Metric Value", x = "Threshold") +
+  theme_minimal()
+```
+
+```{r echo=TRUE}
+library(glmnet)
+
+set.seed(42)
+y_train <- factor(train_set$HeartDisease)
+levels(y_train) <- make.names(levels(y_train))
+
+y_test <- factor(test_set$HeartDisease)
+levels(y_test) <- make.names(levels(y_test))
+
+X_train <- model.matrix(HeartDisease ~ . -1, data = train_set)
+X_test <- model.matrix(HeartDisease ~ . -1, data = test_set)
+
+lasso_model <- cv.glmnet(
+  X_train, 
+  y_train, 
+  family = "binomial",
+  alpha = 1, 
+  standardize = TRUE,
+  nlambda = 100,
+  type.measure = "class",
+  nfolds = 10
+)
+
+lasso_coefficients <- as.matrix(coef(lasso_model, s = "lambda.min"))
+
+non_zero_indices <- which(lasso_coefficients != 0)
+intercept <- lasso_coefficients[1]
+selected_features <- rownames(lasso_coefficients)[non_zero_indices]
+selected_coefficients <- lasso_coefficients[non_zero_indices]
+
+formula_string <- paste0("logit(P(Y=1)) = ", round(intercept, 4))
+for (i in 2:length(selected_features)) {
+  formula_string <- paste0(formula_string, 
+                           ifelse(selected_coefficients[i] > 0, " + ", " - "), 
+                           abs(round(selected_coefficients[i], 4)), 
+                           " * ", 
+                           selected_features[i])
+}
+
+cat(formula_string, "\n")
+```
+
+```{r}
+res <- evaluate_model(
+  model       = lasso_model,
+  test_data   = test_set,
+  outcome     = "HeartDisease",
+  glmnet_newx = X_test,
+  glmnet_s    = "lambda.min"
+)
+```
+
+```{r}
+library(broom)
+lasso_coefs <- as.matrix(coef(lasso_model, s = "lambda.min"))
+selected_vars <- rownames(lasso_coefs)[which(lasso_coefs != 0)]
+selected_vars <- selected_vars[selected_vars != "(Intercept)"]
+
+model_data <- data.frame(y =y_test, X_test)
+
+final_glm <- glm(y ~ ., data = model_data, family = "binomial")
+lasso_results <- tidy(final_glm, conf.int = TRUE, conf.level = 0.95) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    # Transform Log-Odds to Probability (p)
+    OR = exp(estimate),
+    conf.low = exp(conf.low),
+    conf.high = exp(conf.high)
+  )
+
+print(lasso_results)
+
+lasso_results |>
+  filter(conf.high < 1000) |>
+  ggplot(aes(x = OR, y = reorder(term, OR))) +
+    geom_point(size = 3, color = "blue") +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+    labs(
+      title = "Top 15 Risk Factors (Odds Ratios)",
+      subtitle = "Right of Red Line = Increased Risk | Left = Protective",
+      x = "Odds Ratio (95% CI)",
+      y = "Risk Factor"
+    ) +
+    theme_minimal()
+```
+
+```{r}
+coef_df <- data.frame(
+  Feature = rownames(lasso_coefs),
+  Coefficient = lasso_coefs[, 1]
+)
+
+scorecard <- coef_df %>%
+  filter(Coefficient != 0) %>%
+  mutate(
+    Points = round(Coefficient * 1000, 0),
+    Type = ifelse(Feature == "(Intercept)", "Base Score", 
+           ifelse(grepl("Age|RestingBP|Cholesterol|MaxHR|Oldpeak|FastingBS", Feature), 
+                  "Continuous (Multiply by Value)", "Binary (Add if True)"))
+  ) %>%
+  arrange(desc(abs(Coefficient)))
+
+scorecard
+
+test_scores <- predict(lasso_model, newx = X_test, s = "lambda.min", type = "link")
+test_probs <- predict(lasso_model, newx = X_test, s = "lambda.min", type = "response")
+patient_scores <- data.frame(
+  Patient_ID = rownames(test_set),
+  Actual_Status = test_set$HeartDisease,
+  Risk_Score = round(as.numeric(test_scores) * 1000, 0),
+  Probability = round(as.numeric(test_probs), 4)
+)
+head(patient_scores)
+
+```
+
+```{r}
+ggplot(patient_scores, aes(x = Risk_Score, y = Probability)) +
+  geom_point(aes(color = factor(Actual_Status)), alpha = 0.6, size = 2) +
+  stat_function(fun = function(x) 1 / (1 + exp(-x)), color = "black", linewidth = 1) +
+  
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray50") +
+  
+  scale_color_manual(values = c("#96ceb4", "#ff6f69"), labels = c("Healthy", "Disease")) +
+  labs(
+    title = "Scorecard Risk Curve",
+    subtitle = "Higher Score = Higher Probability of Heart Disease",
+    x = "Total Risk Score (Log-Odds)",
+    y = "Predicted Probability",
+    color = "Actual Outcome"
+  ) +
+  theme_minimal(base_size = 14) +
+  annotate("text", x = -2, y = 0.1, label = "Low Risk Zone", color = "darkgreen") +
+  annotate("text", x = 2, y = 0.9, label = "High Risk Zone", color = "darkred")
+```
