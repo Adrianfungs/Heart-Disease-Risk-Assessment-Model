@@ -1,62 +1,71 @@
-# Heart Disease Prediction & Risk Modeling 🫀
+# Heart Disease Prediction & Clinical Risk Scoring 🫀
 
 **Course:** BIOS5801 - Final Project  
 **Date:** December 2025  
 **Language:** R
 
 ## 📖 Project Overview
-This project applies statistical modeling and machine learning techniques to a clinical dataset to predict the presence of heart disease. The analysis focuses not only on predictive accuracy but also on **model interpretability** and **clinical risk assessment**.
-
-The workflow includes extensive Exploratory Data Analysis (EDA), advanced missing value imputation, and a comparison of three distinct modeling approaches: **Naive Bayes**, **XGBoost**, and **Lasso Regression**.
-
+This project applies statistical modeling and machine learning techniques to a clinical dataset to predict the presence of heart disease. Beyond standard prediction, the analysis focuses heavily on **model interpretability** and **clinical risk assessment**, culminating in a patient-facing "Risk Scorecard."
 
 ## 📊 Dataset
-The analysis uses the `heart.csv` dataset, which includes the following clinical features:
+The analysis uses the `heart.csv` dataset ($N=918$), featuring:
 * **Numerical:** Age, RestingBP, Cholesterol, MaxHR, Oldpeak.
 * **Categorical:** Sex, ChestPainType, FastingBS, RestingECG, ExerciseAngina, ST_Slope.
 * **Target:** HeartDisease (Binary: 0/1).
 
 ## 🛠️ Methodology
 
-### 1. Data Cleaning & Preprocessing
-* **Handling Zero Values:** Biologically impossible zeros in `RestingBP` and `Cholesterol` were converted to `NA`.
-* **Imputation:** Utilized **k-Nearest Neighbors (kNN)** imputation (k=5) via the `VIM` package to handle missing data.
-* **Encoding:** Applied One-Hot Encoding using `fastDummies` for categorical variables.
-* **Splitting:** Data partitioned into 80% Training and 20% Testing sets using `caret`.
+### 1. Preprocessing & EDA
+* [cite_start]**Imputation:** Biological zeros in `Cholesterol` and `RestingBP` were treated as missing and imputed using **k-Nearest Neighbors (k=5)** [cite: 2007-2009].
+* [cite_start]**Outlier Detection:** Violin plots identified significant outliers in `Cholesterol` (up to 603) and `RestingBP` (up to 200)[cite: 1999, 2026].
+* [cite_start]**Correlation:** A Spearman correlation heatmap revealed that `MaxHR` (-0.40) and `Oldpeak` (0.40) have the strongest linear relationships with Heart Disease among numerical variables [cite: 2504-2512].
 
-### 2. Exploratory Data Analysis (EDA)
-* **Distributions:** Histograms and Density plots for numerical features.
-* **Outlier Detection:** Violin and Boxplots.
-* **Correlations:** Spearman correlation heatmaps and Chi-square tests for categorical variables.
-* **Multivariate Analysis:** Scatter plot matrices grouped by disease status.
+### 2. Modeling Pipeline
+Three models were trained and tuned using 5-fold Cross-Validation:
+1.  [cite_start]**Naive Bayes:** Tuned with Kernel estimation and Laplace smoothing[cite: 2728].
+2.  [cite_start]**XGBoost:** Gradient boosting with SHAP interpretability[cite: 2941].
+3.  [cite_start]**Lasso Logistic Regression:** Regularized regression for feature selection and scorecard creation[cite: 3302].
 
-### 3. Modeling Approaches
-The project evaluates three models with hyperparameter tuning:
+## 🏆 Model Results
 
-1.  **Naive Bayes:**
-    * Tuned with Kernel density estimation and Laplace smoothing.
-2.  **XGBoost (eXtreme Gradient Boosting):**
-    * Tuned `nrounds`, `max_depth`, `eta`, `gamma`, and `subsample` using Cross-Validation.
-    * Includes **SHAP (SHapley Additive exPlanations)** analysis to visualize feature impact.
-3.  **Lasso Logistic Regression (GLMNet):**
-    * Used for feature selection and regularization.
-    * Converted coefficients into **Odds Ratios** for clinical interpretation.
 
-## 💡 Key Features & Insights
+**XGBoost** achieved the highest performance across all metrics. Below is the performance on the held-out test set (20% split):
 
-### 🔍 Interpretability & Risk Scoring
-Unlike "black box" predictions, this project generates actionable insights:
-* **SHAP Summary Plots:** Identifies which features (e.g., ST Slope, Chest Pain Type) drive the XGBoost predictions.
-* **Clinical Scorecard:** Derived from Lasso coefficients, creating a point-based system where users can calculate a "Risk Score" and convert it to a probability of heart disease.
+| Model | Accuracy | ROC AUC | Precision | Recall | Brier Score |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **XGBoost** | **87.43%** | **0.939** | **0.882** | **0.891** | **0.092** |
+| Naive Bayes | 86.89% | 0.926 | 0.889 | 0.871 | 0.120 |
+| Lasso GLM | 86.34% | 0.929 | 0.864 | 0.891 | 0.099 |
 
-### 📈 Advanced Evaluation
-* **Threshold Tuning:** Analyzed how moving the classification threshold impacts Precision, Recall, and F1 scores.
-* **Age Stratification:** Evaluated model performance across specific age groups (<45, 45-60, >60) to ensure fairness and reliability.
-* **Calibration Plots:** Verified if predicted probabilities match observed event rates.
+[cite_start]*Metrics cited from output logs [cite: 2760-2763, 2990-2993, 3369-3372].*
+
+## 💡 Key Clinical Insights
+
+### 1. Top Risk Factors (SHAP Analysis)
+Using SHAP (SHapley Additive exPlanations) on the XGBoost model, the most dominant predictors of heart disease were:
+1.  [cite_start]**ST Slope (Up vs. Flat/Down):** The single most critical feature[cite: 3150].
+2.  [cite_start]**Exercise Angina:** Presence of angina during exercise significantly increases risk[cite: 3151].
+3.  [cite_start]**Chest Pain Type:** Specifically `ASY` (Asymptomatic) and `NAP` (Non-Anginal Pain)[cite: 3153].
+4.  [cite_start]**Sex:** Being Male is associated with higher risk[cite: 3154].
+
+
+### 2. Age Stratification Analysis
+The model's performance varies significantly by patient age, performing best on elderly patients:
+* **< 45 years:** 90.0% Accuracy (Sample size small)
+* **45 - 60 years:** 83.0% Accuracy (Lowest performance)
+* **> 60 years:** 94.3% Accuracy (Highest reliability)
+[cite_start]*Source: Age group performance table[cite: 3250].*
+
+### 3. Patient Risk Scorecard
+A logistic scorecard was derived from Lasso coefficients to translate complex model outputs into a simple "Risk Score."
+* **The Curve:** The relationship follows a sigmoid curve where a score of **0** represents a 50% probability.
+* **Risk Zones:**
+    * **Low Risk:** Score < 0 (Green Zone)
+    * **High Risk:** Score > 0 (Red Zone)
+* [cite_start]**Example Calculation:** A patient with a calculated score of `914` has a **71.38%** probability of heart disease[cite: 3493].
+
 
 ## 📦 Dependencies
-To run this project, you will need the following R libraries:
-
 ```r
 install.packages(c(
   "ggplot2", "gridExtra", "VIM", "GGally", "dplyr", "corrplot", 
